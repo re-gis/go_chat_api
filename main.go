@@ -1,6 +1,8 @@
 package main
 
 import (
+	"chatapp/database"
+	"chatapp/routes"
 	"log"
 	"os"
 
@@ -10,16 +12,24 @@ import (
 
 func main() {
 	err := godotenv.Load()
-	if err!=nil {
+	if err != nil {
 		log.Fatal("Error while loading .env file...")
 	}
 
-	port:= os.Getenv("PORT")
+	port := os.Getenv("PORT")
 
-	r:=gin.Default()
+	r := gin.Default()
+
+	var c *gin.Context
+
+	// database
+	database.Connect(c)
+
+	/* ROUTES */
+	routes.SetupRoutes(r)
 
 	if port == "" {
-		port= "8080"
+		port = "8080"
 	}
 
 	r.Run()
