@@ -20,10 +20,9 @@ func main() {
 
 	r := gin.Default()
 
-	var c *gin.Context
 
 	// database
-	database.Connect(c)
+	database.Connect()
 
 	/* ROUTES */
 	routes.SetupRoutes(r)

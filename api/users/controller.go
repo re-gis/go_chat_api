@@ -15,16 +15,17 @@ import (
 
 var jwtKey = os.Getenv("JWT_KEY")
 
-func RegisterUser(c *gin.Context) {
-	var newUser database.User
-	var eUser database.User
+var eUser database.User
+var newUser database.User
 
-	if err := c.BindJSON(&newUser); err != nil {
+func RegisterUser(c *gin.Context) {
+
+	if err := c.Bind(&newUser); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	if newUser.Email == "" || newUser.Name == "" || newUser.Password == "" || newUser.Profile == "" {
+	if newUser.Email == "" || newUser.Name == "" || newUser.Password == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "All credentials are required!"})
 		return
 	}
@@ -92,4 +93,75 @@ func RegisterUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Email already taken..."})
 		return
 	}
+}
+
+/* LOGIN */
+func LoginUser(c *gin.Context) {
+	if err := c.BindJSON(&newUser); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while binding data..."})
+		return
+	}
+
+	if newUser.Email == "" || newUser.Password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "All credentials are required!"})
+		return
+	}
+
+	if err := database.DB.Where("email =?", newUser.Email).First(&eUser).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email or password..."})
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(eUser.Password), []byte(newUser.Password)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email or password..."})
+		return
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"id":    eUser.ID,
+		"email": eUser.Email,
+	})
+
+	tokenString, err := token.SignedString([]byte(jwtKey))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while generating the token..."})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Logged in successfully...", "token": tokenString})
+}
+
+func DeleteUserAccount(c *gin.Context) {
+	userEmail, exists := c.Get("email")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Login to continue..."})
+		return
+	}
+
+	if err := c.BindJSON(&newUser); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while binding data..."})
+		return
+	}
+
+	if newUser.Password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password required to delete the account..."})
+		return
+	}
+
+	if err := database.DB.Where("email = ?", userEmail).First(&eUser).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found!"})
+		return
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(eUser.Password), []byte(newUser.Password)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Incorrect password provided!"})
+		return
+	}
+
+	// delete the user
+	if err := database.DB.Delete(&eUser).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while deleting the user..."})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Account deleted successfully..."})
 }
