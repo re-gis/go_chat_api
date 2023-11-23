@@ -1,6 +1,7 @@
 package main
 
 import (
+	"chatapp/api/sockets"
 	"chatapp/database"
 	"chatapp/routes"
 	"log"
@@ -20,12 +21,19 @@ func main() {
 
 	r := gin.Default()
 
+	if err := sockets.InitSocket(); err != nil {
+		panic(err)
+	}
 
 	// database
 	database.Connect()
 
 	/* ROUTES */
 	routes.SetupRoutes(r)
+
+	sockets.SocketEvents()
+	go sockets.SocketServer.Serve()
+	defer sockets.SocketServer.Close()
 
 	if port == "" {
 		port = "8080"

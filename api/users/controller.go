@@ -165,3 +165,71 @@ func DeleteUserAccount(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Account deleted successfully..."})
 }
+
+func UpdateUserAccount(c *gin.Context) {
+	user_email, exists := c.Get("email")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Login to continue..."})
+		return
+	}
+
+	user_id := c.Param(("id"))
+	if user_id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User id is required..."})
+		return
+	}
+
+	// get the user
+	if err := database.DB.Where("id =?", user_id).First(&eUser).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found!"})
+		return
+	}
+
+	if eUser.Email != user_email {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "You are not authorised to perform this action!"})
+		return
+	}
+
+	// bind the json
+	if err := c.BindJSON(&newUser); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while binding the data..."})
+		return
+	}
+
+	if newUser.Email != "" {
+		eUser.Email = newUser.Email
+	}
+
+	if newUser.Password != "" {
+		hashedPass, err := bcrypt.GenerateFromPassword([]byte(newUser.Password), bcrypt.DefaultCost)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while hashing the password..."})
+			return
+		}
+
+		eUser.Password = string(hashedPass)
+	}
+
+	if newUser.Name != "" {
+		eUser.Name = newUser.Name
+	}
+
+	if err := database.DB.Save(&eUser).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while saving the user..."})
+		return
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"id":    eUser.ID,
+		"email": eUser.Email,
+	})
+
+	tokenString, err := token.SignedString([]byte(jwtKey))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while generating the token..."})
+		return
+	}
+
+	eUser.Password = ""
+	c.JSON(http.StatusOK, gin.H{"message": "User updated successfully...", "user": eUser, "token": tokenString})
+}
